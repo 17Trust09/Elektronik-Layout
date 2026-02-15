@@ -34,3 +34,7 @@ class AppContext(QObject):
     def select(self, entity: str, entity_id: int) -> None:
         self._selected_type, self._selected_id = entity, entity_id
         self.selection_changed.emit(entity, entity_id)
+
+    @property
+    def current_selection(self) -> tuple[str, int]:
+        return self._selected_type, self._selected_id

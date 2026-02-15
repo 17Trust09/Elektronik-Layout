@@ -1,26 +1,30 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtCore import QPointF, Signal
 from PySide6.QtGui import QAction, QBrush, QColor, QPen
 from PySide6.QtWidgets import QGraphicsRectItem, QGraphicsScene, QGraphicsSimpleTextItem, QGraphicsView, QInputDialog, QMenu
 
-from models.schema import Device, DeviceType, Panel
+from models.schema import Device, DeviceType, Panel, ProtectionLink
 
 
 class DeviceItem(QGraphicsRectItem):
     def __init__(self, device: Device) -> None:
-        super().__init__(0, 0, 120, 60)
+        super().__init__(0, 0, 140, 72)
         self.device_id = device.id
+        self.device_type = device.type.value.lower()
         self.setFlags(self.GraphicsItemFlag.ItemIsMovable | self.GraphicsItemFlag.ItemIsSelectable)
+        self.normal_pen = QPen(QColor("#718096"), 2)
+        self.highlight_pen = QPen(QColor("#f6ad55"), 3)
         self.setBrush(QBrush(QColor("#2d3748")))
-        self.setPen(QPen(QColor("#718096"), 2))
-        label = QGraphicsSimpleTextItem(f"{device.label}\n{device.rating}", self)
+        self.setPen(self.normal_pen)
+        text = f"{device.type.value}\n{device.label} ({device.rating})\nPos: {device.row}/{device.col}"
+        label = QGraphicsSimpleTextItem(text, self)
         label.setBrush(QBrush(QColor("#e2e8f0")))
-        label.setPos(8, 8)
+        label.setPos(8, 6)
 
 
 class PanelView(QGraphicsView):
-    device_selected = Signal(int)
+    entity_selected = Signal(str, int)
     assign_rcd_requested = Signal()
 
     def __init__(self, app_ctx) -> None:
@@ -28,39 +32,59 @@ class PanelView(QGraphicsView):
         self.app_ctx = app_ctx
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
-        self.setRenderHint
         self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-        self.grid = 140
+        self.grid_x = 160
+        self.grid_y = 90
+        self._items: dict[int, DeviceItem] = {}
 
     def refresh(self) -> None:
         self.scene.clear()
+        self._items.clear()
         with self.app_ctx.db.session() as session:
             panel = session.query(Panel).first()
             if not panel:
                 return
-            devices = session.query(Device).filter(Device.panel_id == panel.id).all()
-            for device in devices:
+            for device in session.query(Device).filter(Device.panel_id == panel.id).all():
                 item = DeviceItem(device)
-                item.setPos(QPointF(device.col * self.grid, device.row * 80))
+                item.setPos(QPointF(device.col * self.grid_x, device.row * self.grid_y))
                 self.scene.addItem(item)
+                self._items[device.id] = item
+
+    def set_highlight(self, entity: str, entity_id: int) -> None:
+        for item in self._items.values():
+            item.setPen(item.normal_pen)
+
+        with self.app_ctx.db.session() as session:
+            if entity == "device":
+                device = session.get(Device, entity_id)
+                if not device:
+                    return
+                if entity_id in self._items:
+                    self._items[entity_id].setPen(self._items[entity_id].highlight_pen)
+                if device.type == DeviceType.RCD:
+                    mcb_ids = [l.mcb_device_id for l in session.query(ProtectionLink).filter(ProtectionLink.rcd_device_id == entity_id).all()]
+                    for mcb_id in mcb_ids:
+                        if mcb_id in self._items:
+                            self._items[mcb_id].setPen(self._items[mcb_id].highlight_pen)
 
     def mouseReleaseEvent(self, event) -> None:
         super().mouseReleaseEvent(event)
         moved = [i for i in self.scene.selectedItems() if isinstance(i, DeviceItem)]
-        if moved:
-            with self.app_ctx.db.session() as session:
-                for item in moved:
-                    device = session.get(Device, item.device_id)
-                    if device:
-                        device.col = max(0, round(item.pos().x() / self.grid))
-                        device.row = max(0, round(item.pos().y() / 80))
-                self.app_ctx.data_changed.emit()
+        if not moved:
+            return
+        with self.app_ctx.db.session() as session:
+            for item in moved:
+                device = session.get(Device, item.device_id)
+                if device:
+                    device.col = max(0, round(item.pos().x() / self.grid_x))
+                    device.row = max(0, round(item.pos().y() / self.grid_y))
+        self.app_ctx.data_changed.emit()
 
     def mousePressEvent(self, event) -> None:
         super().mousePressEvent(event)
         item = self.itemAt(event.position().toPoint())
         if isinstance(item, DeviceItem):
-            self.device_selected.emit(item.device_id)
+            self.entity_selected.emit("device", item.device_id)
 
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
@@ -71,7 +95,6 @@ class PanelView(QGraphicsView):
         menu.addAction(del_action)
         menu.addAction(assign_action)
         choice = menu.exec(event.globalPos())
-
         if choice == add_action:
             self._add_device()
         elif choice == del_action:
@@ -85,17 +108,17 @@ class PanelView(QGraphicsView):
             return
         with self.app_ctx.db.session() as session:
             panel = session.query(Panel).first()
-            if not panel:
+            if panel is None:
                 return
             session.add(Device(panel_id=panel.id, type=DeviceType.OTHER, label=label, rating="", row=0, col=0))
         self.app_ctx.data_changed.emit()
 
     def _delete_selected_device(self) -> None:
-        items = [i for i in self.scene.selectedItems() if isinstance(i, DeviceItem)]
-        if not items:
+        selected = [i for i in self.scene.selectedItems() if isinstance(i, DeviceItem)]
+        if not selected:
             return
         with self.app_ctx.db.session() as session:
-            for item in items:
+            for item in selected:
                 device = session.get(Device, item.device_id)
                 if device:
                     session.delete(device)

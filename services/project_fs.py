@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
 from models.schema import (
     Circuit,
     ConfidenceType,
@@ -40,7 +42,7 @@ class ProjectFS:
                 self.seed_demo(session)
         return db
 
-    def seed_demo(self, session) -> None:
+    def seed_demo(self, session: Session) -> None:
         session.add(ProjectMeta(name="Demo Haus", address="Musterstraße 1", notes="Automatisch erzeugt"))
         panel = Panel(name="UV EG", location="Erdgeschoss")
         session.add(panel)
@@ -59,29 +61,34 @@ class ProjectFS:
             mcbs.append(mcb)
 
         session.flush()
-        rooms = [
-            Room(name=n)
-            for n in ["Flur", "Küche", "Wohnzimmer", "Bad", "Schlafzimmer", "Kinderzimmer", "Garage", "Garten"]
-        ]
+        rooms = [Room(name=n) for n in ["Flur", "Küche", "Wohnzimmer", "Bad", "Schlafzimmer", "Kinderzimmer", "Garage", "Garten"]]
         session.add_all(rooms)
         session.flush()
 
         circuits: list[Circuit] = []
         for i, mcb in enumerate(mcbs[:6]):
-            c = Circuit(mcb_device_id=mcb.id, name=f"Stromkreis {i+1}", purpose=PurposeType.SOCKETS if i % 2 == 0 else PurposeType.LIGHTS)
+            c = Circuit(
+                mcb_device_id=mcb.id,
+                name=f"Stromkreis {i + 1}",
+                purpose=PurposeType.SOCKETS if i % 2 == 0 else PurposeType.LIGHTS,
+                confidence=ConfidenceType.UNKNOWN,
+            )
             session.add(c)
             circuits.append(c)
 
         session.flush()
+        endpoint_counter = 0
         for idx, c in enumerate(circuits):
-            for j in range(4):
+            count = 5 if idx == 0 else 4  # ergibt exakt 25 Endpoints
+            for j in range(count):
                 room = rooms[(idx + j) % len(rooms)]
+                endpoint_counter += 1
                 session.add(
                     Endpoint(
                         circuit_id=c.id,
                         room_id=room.id,
                         type=EndpointType.SOCKET if j % 2 == 0 else EndpointType.LIGHT,
-                        description=f"Endpoint {idx+1}-{j+1}",
+                        description=f"Endpoint {endpoint_counter}",
                         confidence=ConfidenceType.UNKNOWN,
                     )
                 )
