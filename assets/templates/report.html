@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<title>StromkreisDoku Report</title>
+<style>{{ css }}</style>
+</head>
+<body>
+<h1>StromkreisDoku Report</h1>
+
+<h2>Panel summary</h2>
+<table>
+<tr><th>Name</th><th>Ort</th></tr>
+{% for panel in panels %}<tr><td>{{ panel.name }}</td><td>{{ panel.location }}</td></tr>{% endfor %}
+</table>
+
+<h2>RCD -> MCB Mapping</h2>
+<table>
+<tr><th>RCD</th><th>MCB</th></tr>
+{% for l in links %}
+<tr>
+<td>{{ devices[l.rcd_device_id].label if l.rcd_device_id in devices else l.rcd_device_id }}</td>
+<td>{{ devices[l.mcb_device_id].label if l.mcb_device_id in devices else l.mcb_device_id }}</td>
+</tr>
+{% endfor %}
+</table>
+
+<h2>Circuits</h2>
+<ul>{% for c in circuits %}<li>{{ c.name }} ({{ c.purpose.value }}, {{ c.confidence.value }})</li>{% endfor %}</ul>
+
+<h2>Per circuit: endpoints by room</h2>
+{% for c in circuits %}
+<h3>{{ c.name }}</h3>
+<ul>
+{% for e in endpoints if e.circuit_id == c.id %}
+<li>{{ rooms[e.room_id].name if e.room_id in rooms else e.room_id }}: {{ e.description }} ({{ e.confidence.value }})</li>
+{% endfor %}
+</ul>
+{% endfor %}
+
+<h2>Open issues</h2>
+<ul>
+{% for e in endpoints if e.confidence.value in ['UNKNOWN', 'LIKELY'] %}
+<li>{{ e.description }} - {{ e.confidence.value }}</li>
+{% endfor %}
+</ul>
+</body>
+</html>

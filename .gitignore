@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+demo_project/
+demo_project_test/
+dist/
+build/
+*.spec.bak
