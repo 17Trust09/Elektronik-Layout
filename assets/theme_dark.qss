@@ -1,0 +1,5 @@
+QWidget { background-color: #111827; color: #e5e7eb; font-size: 12px; }
+QTreeWidget, QTabWidget::pane, QGraphicsView, QTextEdit, QLineEdit { background-color: #1f2937; border: 1px solid #374151; }
+QPushButton { background-color: #2563eb; color: white; border-radius: 6px; padding: 6px 10px; }
+QPushButton:hover { background-color: #1d4ed8; }
+QStatusBar { background: #0f172a; }
