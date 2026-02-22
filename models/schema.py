@@ -46,6 +46,13 @@ class EndpointType(str, Enum):
     OTHER = "OTHER"
 
 
+class PlanItemType(str, Enum):
+    CEILING_LIGHT = "CEILING_LIGHT"
+    SPOTLIGHT = "SPOTLIGHT"
+    NETWORK_SOCKET = "NETWORK_SOCKET"
+    OUTDOOR_LIGHT = "OUTDOOR_LIGHT"
+
+
 class ProjectMeta(Base):
     __tablename__ = "project_meta"
 
@@ -133,6 +140,17 @@ class Endpoint(Base):
 
     circuit: Mapped[Circuit] = relationship(back_populates="endpoints")
     room: Mapped[Room] = relationship(back_populates="endpoints")
+
+
+class RoomPlanItem(Base):
+    __tablename__ = "room_plan_item"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("room.id"))
+    item_type: Mapped[PlanItemType] = mapped_column(SAEnum(PlanItemType))
+    label: Mapped[str] = mapped_column(String(255), default="")
+    pos_x: Mapped[float] = mapped_column(default=80.0)
+    pos_y: Mapped[float] = mapped_column(default=80.0)
 
 
 class Attachment(Base):

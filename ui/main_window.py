@@ -29,6 +29,7 @@ from ui.inspector import InspectorWidget
 from ui.panel_view import PanelView
 from ui.rcd_mapping_wizard import RcdMappingWizard
 from ui.test_mode_wizard import TestModeWizard
+from ui.room_planner import RoomPlannerWidget
 
 LOGGER = logging.getLogger(__name__)
 
@@ -84,9 +85,18 @@ class MainWindow(QMainWindow):
         self.graph_view = GraphView(app_ctx)
         self.rooms_table = QTreeWidget()
         self.rooms_table.setHeaderLabels(["Room", "Floor"])
+        self.rooms_table.itemClicked.connect(self.on_room_selected)
+        self.room_planner = RoomPlannerWidget(app_ctx)
+        self.room_planner.changed.connect(lambda: self.status_dirty.setText("Dirty"))
+
+        rooms_tab = QWidget()
+        rooms_layout = QHBoxLayout(rooms_tab)
+        rooms_layout.addWidget(self.rooms_table, 1)
+        rooms_layout.addWidget(self.room_planner, 2)
+
         self.tabs.addTab(self.panel_view, "PanelView")
         self.tabs.addTab(self.graph_view, "GraphView")
-        self.tabs.addTab(self.rooms_table, "Rooms")
+        self.tabs.addTab(rooms_tab, "Rooms")
         center_layout.addLayout(top_row)
         center_layout.addWidget(self.tabs)
 
@@ -157,9 +167,23 @@ class MainWindow(QMainWindow):
 
     def refresh_rooms(self) -> None:
         self.rooms_table.clear()
+        first_room_id: int | None = None
         with self.app_ctx.db.session() as session:
             for room in session.query(Room).all():
-                self.rooms_table.addTopLevelItem(QTreeWidgetItem([room.name, room.floor]))
+                item = QTreeWidgetItem([room.name, room.floor])
+                item.setData(0, Qt.ItemDataRole.UserRole, room.id)
+                self.rooms_table.addTopLevelItem(item)
+                if first_room_id is None:
+                    first_room_id = room.id
+        if first_room_id is not None:
+            self.room_planner.set_room(first_room_id)
+
+    def on_room_selected(self, item: QTreeWidgetItem) -> None:
+        room_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if room_id is None:
+            return
+        self.room_planner.set_room(int(room_id))
+        self.app_ctx.select("room", int(room_id))
 
     def on_nav_clicked(self, item: QTreeWidgetItem) -> None:
         payload = item.data(0, Qt.ItemDataRole.UserRole)

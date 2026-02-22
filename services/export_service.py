@@ -6,7 +6,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
-from models.schema import Circuit, Device, DeviceType, Endpoint, Panel, ProtectionLink, Room, PurposeType, ConfidenceType, EndpointType
+from models.schema import Circuit, Device, DeviceType, Endpoint, Panel, PlanItemType, ProtectionLink, Room, RoomPlanItem, PurposeType, ConfidenceType, EndpointType
 
 
 class ExportService:
@@ -40,6 +40,17 @@ class ExportService:
                 for c in session.query(Circuit).all()
             ],
             "rooms": [{"id": r.id, "name": r.name, "floor": r.floor} for r in session.query(Room).all()],
+            "room_plan_items": [
+                {
+                    "id": rp.id,
+                    "room_id": rp.room_id,
+                    "item_type": rp.item_type.value,
+                    "label": rp.label,
+                    "pos_x": rp.pos_x,
+                    "pos_y": rp.pos_y,
+                }
+                for rp in session.query(RoomPlanItem).all()
+            ],
             "endpoints": [
                 {
                     "id": e.id,
@@ -57,6 +68,7 @@ class ExportService:
 
     def import_json(self, session: Session, input_path: Path) -> None:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
+        session.query(RoomPlanItem).delete()
         session.query(Endpoint).delete()
         session.query(Circuit).delete()
         session.query(ProtectionLink).delete()
@@ -91,6 +103,17 @@ class ExportService:
                     name=c["name"],
                     purpose=PurposeType(c.get("purpose", "OTHER")),
                     confidence=ConfidenceType(c.get("confidence", "UNKNOWN")),
+                )
+            )
+        for rp in payload.get("room_plan_items", []):
+            session.add(
+                RoomPlanItem(
+                    id=rp["id"],
+                    room_id=rp["room_id"],
+                    item_type=PlanItemType(rp.get("item_type", "CEILING_LIGHT")),
+                    label=rp.get("label", ""),
+                    pos_x=rp.get("pos_x", 80.0),
+                    pos_y=rp.get("pos_y", 80.0),
                 )
             )
         for e in payload.get("endpoints", []):
